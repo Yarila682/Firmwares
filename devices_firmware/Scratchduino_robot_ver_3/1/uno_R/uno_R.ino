@@ -1,4 +1,4 @@
-#define FIRMWARE_VERSION "00002"
+#define FIRMWARE_VERSION "00003"
 
 
 #include <EEPROM.h>
@@ -185,7 +185,7 @@ class AnalogSensor: public ISensor{
    }
 
    byte* getResult(){
-      return new byte[SENSOR_RESPONSE_LENGTH]{0, 0, 0, byte(analogRead(pin))};
+      return new byte[SENSOR_RESPONSE_LENGTH]{0, 0, 0, byte(analogRead(pin)*0.25)};
    }
 };
 
