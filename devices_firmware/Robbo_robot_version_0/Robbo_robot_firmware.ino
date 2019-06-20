@@ -1,4 +1,4 @@
-#define FIRMWARE_VERSION "00008"
+#define FIRMWARE_VERSION "00009"
 //toDO PIDpath обнулить при перполнении на обоих моторах
 
 #include <EEPROM.h>
@@ -233,24 +233,36 @@ float m_lastResult = 0;
 
 void onLeftMotorStep() {
   leftMotor.onStep();
-
   if ((leftMotor.stepsLimit > 0) && (leftMotor.stepsCnt >= leftMotor.stepsLimit)) {
     leftMotor.stepsLimit = 0;
-    rightMotor.stepsLimit = 0;
     leftMotor.stop();
-    rightMotor.stop();
+    if(flag==0)
+    {
+      rightMotor.setSpeedAndDirection(15,globalRightDir);
+    }
+    else 
+    {
+      rightMotor.stepsLimit = 0;
+      rightMotor.stop();
+    }
     flag=2;
   }
 }
 
 void onRightMotorStep() {
   rightMotor.onStep();
-
   if ((rightMotor.stepsLimit > 0) && ( rightMotor.stepsCnt >= rightMotor.stepsLimit)) {
-    leftMotor.stepsLimit = 0;
     rightMotor.stepsLimit = 0;
-    leftMotor.stop();
     rightMotor.stop();
+    if(flag==0)
+    {
+    leftMotor.setSpeedAndDirection(15,globalLeftDir);
+    }
+    else
+    {
+      leftMotor.stepsLimit = 0;
+      leftMotor.stop();
+    }
     flag=2;
   }
 
@@ -551,7 +563,7 @@ class SonicSensor: public ISensor {
     }
 
     byte* getResult() {
-      return new byte[SENSOR_RESPONSE_LENGTH] {0, 0, 0, result};
+      return new byte[SENSOR_RESPONSE_LENGTH] {0, 0, 0, (byte)result};
     }
 };
 
@@ -576,8 +588,10 @@ class ColorSensor: public ISensor {
    unsigned long timeHighEnd = 0;
 
    unsigned long timeSync = 0;
-
-
+    int INTERVAL_BIT_ALL=0;
+    int INTERVAL_BIT_NEW=0;
+    byte TRIES=0;
+   boolean flag2=0;
    byte byteCounter = 0;
    byte bitCounter = 0;
    byte result[3] = {0, 0, 0};
@@ -593,78 +607,6 @@ class ColorSensor: public ISensor {
     ColorSensor(int pin) {
       this -> pin = pin;
       pinAsInput(pin);
-
-/*      
-      //Not callibrated
-      long lTimeMillis = millis();
-      
-      long lMaxHighDuration = 0;
-      long lMaxLowDuration = 0;
-      long lCurrentHighDuration = 0;
-      long lCurrentLowDuration = 0;
-      
-      
-      boolean isLastHigh = false;
-      boolean isLastLow = false;
-//      cli();
-      long lLastTimeProbbed = micros();
-      while(millis() - lTimeMillis < 10){
-         //A 10 ms interval to probe channel
-         if (digitalState(pin) == LOW){
-            //It's low now
-            
-            if(isLastHigh == true){
-               //was high, now low
-               
-               if(lMaxHighDuration < lCurrentHighDuration){
-                  lMaxHighDuration = lCurrentHighDuration;
-                  lCurrentHighDuration = 0;
-                  lCurrentLowDuration = 0;
-               }
-            }
-            else{
-               //Still low
-               lCurrentLowDuration += (micros() - lLastTimeProbbed);
-               lLastTimeProbbed = micros();
-            }
-            
-            isLastLow = true;
-            isLastHigh = false;
-         }
-         else{
-            //It's high now
-            
-            if(isLastLow == true){
-               //was low, now high
-               
-               if(lMaxLowDuration < lCurrentLowDuration){
-                  lMaxLowDuration = lCurrentLowDuration;
-                  lCurrentHighDuration = 0;
-                  lCurrentLowDuration = 0;
-               }
-            }
-            else{
-               //Still low
-               lCurrentHighDuration += (micros() - lLastTimeProbbed);
-               lLastTimeProbbed = micros();
-            }
-            
-            
-            
-            isLastHigh = true;
-            isLastLow = false;
-         }
-      }
-//      sei();
-      
-      
-      INTERVAL_BIT = (lMaxHighDuration + lMaxLowDuration) / 16;
-      
-      INTERVAL_BIT += 1;
-      
-      INTERVAL_BYTE = INTERVAL_BIT * 8;
-*/      
-      
       INTERVAL_BIT  = 114;
       INTERVAL_BYTE = 912;
     };
@@ -679,14 +621,7 @@ class ColorSensor: public ISensor {
     };
 
 
-//#define INTERVAL_BIT 114
-//#define INTERVAL_BYTE 912
-
-//#define INTERVAL_BIT 114
-//#define INTERVAL_BYTE 912
-
-
-    void reset() {
+void reset() {
       booleanReady = false;
       timeLowStart = 0;
       timeLowEnd = 0;
@@ -702,174 +637,100 @@ class ColorSensor: public ISensor {
       _result[1] = 0;
       _result[2] = 0;
       iSynchronized = 0;
+     if(TRIES<25&&flag2){
+             TRIES++;
+             if(TRIES>5){
+      INTERVAL_BIT_ALL+=INTERVAL_BIT_NEW;
+      INTERVAL_BIT=round(INTERVAL_BIT_ALL/(TRIES-5));
+      INTERVAL_BYTE=INTERVAL_BIT*8;
+    //  Serial.println(INTERVAL_BIT_ALL);
+    //       Serial.println(TRIES); 
+     // Serial.println(INTERVAL_BIT);
+             }
+      }
+      else
+      flag2=1;
     }
 
     void iteration(byte data, byte data2) {
-      //      int correction = data2 * 3;
-
-
-      //DEBUG
-      //iteration()
-      //      if(data == 0) digitalHigh(8);
-
-
-         //operationing mode
-         switch (iSynchronized) {
-           case 0: {
-            
-                //leftMotor.stepsPath = 12; //debug
-                
-               if (digitalState(pin) == LOW) {
-                 iSynchronized = 1;
-                 timeLowStart = micros();
-               }
-               else {
-                 iSynchronized = 0;
-               }
-               break;
-             }
-           case 1: {
-
-                // leftMotor.stepsPath = 1; //debug
-            
-               if (digitalState(pin) == LOW) {
-                 timeLowEnd = micros();
-   
-                 if (timeLowEnd - timeLowStart >= INTERVAL_BYTE - 10) {
-                   iSynchronized = 2;
-                 }
-               }
-               else {
-                 iSynchronized = 0;
-               }
-               break;
-             }
-           case 2: {
-
-             //  leftMotor.stepsPath = 2; //debug
-            
+      switch (iSynchronized) {
+        case 0: {
+            if (digitalState(pin) == HIGH) {
+              iSynchronized = 1;
+              timeLowStart = micros();
+            }
+            else {
+              iSynchronized = 0;
+            }
+            break;
+          }
+        case 1: {
+            if (digitalState(pin) == LOW) {
+              timeLowEnd = micros();
+              if (timeLowEnd - timeLowStart >= (110)*14) {
+                iSynchronized = 2;
+              }
+            }
+            else {
+              iSynchronized = 0;
+            }
+            break;
+          }
+        case 2: {
                if (digitalState(pin) == HIGH) {
-                 //DEBUG
-                 //Long 0 -> Long 1
-                 //               if(data == 0) digitalHigh(12);
-                 timeHighStart = micros();
-                 iSynchronized = 3;
-               }
-               else {
-                 timeLowEnd = micros();
-               }
-               break;
-             }
-           case 3: {
+      //                Serial.println(timeLowEnd - timeLowStart);
+       timeHighStart = micros();
+              iSynchronized = 3;
+            }
+            else {
+              timeLowEnd = micros();
+            }
+            break;
+          }
+        case 3: {
+          INTERVAL_BIT_NEW=round((timeLowEnd-timeLowStart)/14);//mb +114*2/16
+          timeSync=timeLowEnd+INTERVAL_BIT+20;
+   //       Serial.println(INTERVAL_BIT);
+          iSynchronized = 4;
+          }
+        case 4: {
+            if (timeSync <= micros()) {
+              timeSync += INTERVAL_BIT;
+              if (digitalState(pin) == HIGH) {
+                _result[byteCounter] |= (1 << bitCounter);
+              }
+              else {
+                _result[byteCounter] &= ~(1 << bitCounter);
+              }
+              bitCounter++;
+              if (bitCounter > 7) {
+                bitCounter = 0;
+                byteCounter++;
+                if (byteCounter > 2) {
+                  //We done
+                  byteCounter = 0;
+                  iSynchronized = 0;                     
+                  if(abs(result[0] - _result[0]) >= 32 && abs(result[1] - _result[1]) < 5 && abs(result[2] - _result[2]) < 5
+                          || abs(result[0] - _result[0]) < 5 && abs(result[1] - _result[1]) >= 32 && abs(result[2] - _result[2]) < 5
+                          || abs(result[0] - _result[0]) < 5 && abs(result[1] - _result[1]) < 5 && abs(result[2] - _result[2]) >= 32){
 
-            //   leftMotor.stepsPath = 3; //debug
-            
-               if (digitalState(pin) == HIGH) {
-                 timeHighEnd = micros();
-   
-                 if (timeHighEnd - timeHighStart >= INTERVAL_BYTE - 60) {
-                   iSynchronized = 4;
-   
-                   timeSync = timeHighStart + INTERVAL_BYTE;
-                   timeSync += 50;
-                 }
-               }
-               else {
-                 iSynchronized = 0;
-               }
-               break;
-             }
-           case 4: {
-
-               //  leftMotor.stepsPath = 4; //debug
-            
-               //DEBUG
-               //Data transfer start
-               //            if(data == 0) digitalLow(12);
-   
-               if (timeSync <= micros()) {   
-                  //DEBUG
-                  //Bit measurement
-                  //               if(data == 0) digitalHigh(13);
-                  timeSync += INTERVAL_BIT;
-   
-                  if (digitalState(pin) == HIGH) {
-                     _result[byteCounter] |= (1 << bitCounter);
-                  }
-                  else {
-                     _result[byteCounter] &= ~(1 << bitCounter);
-                  }
-                  
-                 //   leftMotor.stepsPath = 5; //debug
-                    
-                  bitCounter++;
-                  if (bitCounter > 7) {
-                     bitCounter = 0;
-                     byteCounter++;
-   
-                    if (byteCounter > 2) {
-                       //We done
-                       byteCounter = 0;
-                       iSynchronized = 0;
-                       booleanReady = true;
-                       
-                       if(abs(result[0] - _result[0]) >= 64 && abs(result[1] - _result[1]) < 5 && abs(result[2] - _result[2]) < 5
-                          || abs(result[0] - _result[0]) < 5 && abs(result[1] - _result[1]) >= 64 && abs(result[2] - _result[2]) < 5
-                          || abs(result[0] - _result[0]) < 5 && abs(result[1] - _result[1]) < 5 && abs(result[2] - _result[2]) >= 64){
-                             
-/*                             
-                       if(abs(result[0] - _result[0]) == 128 && abs(result[1] - _result[1]) < 20 && abs(result[2] - _result[2]) < 20
-                          || abs(result[0] - _result[0]) < 20 && abs(result[1] - _result[1]) == 128 && abs(result[2] - _result[2]) < 20
-                          || abs(result[0] - _result[0]) < 20 && abs(result[1] - _result[1]) < 20 && abs(result[2] - _result[2]) == 128){
-*/                             
-                             
+                          }
+                          else
+                          {
                            
-                          switch (INTERVAL_BIT){
-                             case 114:{
-                                INTERVAL_BIT=113;
-                                INTERVAL_BYTE=904;
-                                break;
-                             }
-                             case 113:{
-                                INTERVAL_BIT=115;
-                                INTERVAL_BYTE=920;
-                                break;
-                             }
-                             case 115:{
-                                INTERVAL_BIT=112;
-                                INTERVAL_BYTE=896;
-                                break;
-                             }
-                             case 112:{
-                                INTERVAL_BIT=116;
-                                INTERVAL_BYTE=928;
-                                break;
-                             }
-                             case 116:{
-                                INTERVAL_BIT=114;
-                                INTERVAL_BYTE=912;
-                                break;
-                             }
-                          }                           
-                       }
-                       
-                       result[0] = _result[0];
-                       result[1] = _result[1];
-                       result[2] = _result[2];    
-
-                   //    leftMotor.stepsPath = 6; //debug                 
-                    }
-                 }
-   
-                 //DEBUG
-                 //Bit measurement
-                 //               if(data == 0) digitalLow(13);
-               }
-               break;
-             }
-         }
+                  result[0] = _result[0];
+                  result[1] = _result[1];
+                  result[2] = _result[2];
+                  
+                  }
+                  booleanReady = true;
+                }
+              }
+            }
+            break;
+          }
+      }
     }
-
 
     boolean isReady() {
 
@@ -1033,106 +894,37 @@ void setup() {
 
 
 }
-
-
-bool itsg;
-float Ks =0; //0.9;integral
-float Kd =7;//0.5; //0.8differencial
-float Kr = 30;//1.3 //1.;proporcional
-//PID regulator 
-float PID(float input)
-{
-   // float  sum = m_lastResult + m_integral * m_period * input;
-  //  float diff = m_differential / m_period * (input - m_lastInput);
-  //  float result = m_proportional * input + sum + diff;
-  float  sum = m_lastResult + Ks * input;
-  float diff = Kd * (input - m_lastInput);
-  float result = Kr * input + sum + diff;
-    m_lastResult = sum;
-    m_lastInput = input;
-    return result;
-}
-float kray=3;
-float kray1=3;
-float Ks1 =0; //0.9;integral
-float Kd1 =4;//0.5; //0.8differencial
-float Kr1 =13;
-float PID1(float input){
-   // float  sum = m_lastResult + m_integral * m_period * input;
-  //  float diff = m_differential / m_period * (input - m_lastInput);
-  //  float result = m_proportional * input + sum + diff;
-//input=input*(-1);
-  float  sum = m_lastResult + Ks1 * input;
-  float diff = Kd1 * (input - m_lastInput);
-  float result = Kr1 * input + sum + diff;
-
-   // result = qMax(m_minSaturation, result);
-   // result = qMin(m_maxSaturation, result);
-
-    m_lastResult = sum;
-    m_lastInput = input;
-
-    return result;
-      
-}
-byte corrector=0;
+float last_input=0;
+float kli = 5;//5
+float kii=  0.995;//0.5
+float diff=5;
 void update_power_using_PID(byte leftSpeed, byte rightSpeed,float input ){
  float corrector_koef = 0; 
- byte leftSpeedCorrected = leftSpeed;
- byte rightSpeedCorrected = rightSpeed;
- if(itsg==0)
-      {
-        corrector_koef =PID(input*input*((input>0)+(input<0)*(-1)));
-        }//*input*((input>0)+(input<0)*(-1)));}//corr >0 esli r>l
- else 
-      {
-        corrector_koef =PID1(input*input*((input>0)+(input<0)*(-1)));
-      }
-
-    //                    |        скорость                     |              на меньше 0                   |                на больше 255             | значение в случе больше 255
-       //это важно иначе возникает различное округление
-        if(input<0)
+ int leftSpeedCorrected ;
+ int rightSpeedCorrected;
+        leftSpeedCorrected = leftSpeed + input*input*((input>0)+(input<0)*(-1))+kli*last_input+(input-last_input)*diff;//5
+        rightSpeedCorrected= rightSpeed-input*input*((input>0)+(input<0)*(-1))-kli*last_input-(input-last_input)*diff;
+        if(leftSpeedCorrected >63)
         {
-       corrector = (byte)-corrector_koef;
-        leftSpeedCorrected =  byte(leftSpeed  - corrector*((input>0)+(input<0)*(-1)));
-        }//* ((float(leftSpeed  )- corrector_koef)>=0)); // *((leftSpeed  - corrector_koef)<speed_limit) + (speed_limit-1) *((leftSpeed  - corrector_koef) >= speed_limit));//*calibraterdl);
-        else
-        {
-        corrector = (byte)corrector_koef;
-        rightSpeedCorrected = byte(rightSpeed + corrector*((input>0)+(input<0)*(-1))) ;//* ((float(rightSpeed ) + corrector_koef)>=0)); // *((rightSpeed + corrector_koef)<speed_limit) + (speed_limit-1) * ((rightSpeed + corrector_koef)>= speed_limit));//*calibrateldr);        
+        rightSpeedCorrected-=(leftSpeedCorrected-63);
+        leftSpeedCorrected =63;
         }
-        //}
-    /*   else
+        if(rightSpeedCorrected >63)
         {
-        leftSpeedCorrected =  byte((leftSpeed  + corrector_koef)) ;
-        rightSpeedCorrected = byte((rightSpeed - corrector_koef)) ;
-        }*/
-       //проверка на сильное отклонение - защита от других устойчивых положений ПИДа
-if(itsg==0)
-{
-if(input<=-kray)
-{leftSpeedCorrected =  1;}
-if(input>=kray)
-{rightSpeedCorrected = 1;}
+          leftSpeedCorrected-=(rightSpeedCorrected-63);
+          rightSpeedCorrected =63;
+        }
+        if(leftSpeedCorrected <0)
+        leftSpeedCorrected =0;
+        if(rightSpeedCorrected <0)
+        rightSpeedCorrected =0;
+       leftMotor.setSpeedAndDirection((byte)leftSpeedCorrected,    globalLeftDir);
+       rightMotor.setSpeedAndDirection((byte)rightSpeedCorrected,  globalRightDir);
+       if(kii!=1)
+        last_input=last_input*kii+input;//0.5
+       else
+       last_input=0;
 }
-else
-{
-if(input<-kray1)
-{leftSpeedCorrected =  1;}
-if(input>kray1)
-{rightSpeedCorrected = 1;}
-}         
-       leftMotor.setSpeedAndDirection(leftSpeedCorrected,    globalLeftDir);
-       rightMotor.setSpeedAndDirection(rightSpeedCorrected,  globalRightDir);
-//
-//          sensors[0]->debugSetValue(rightSpeedCorrected);
-//          sensors[1]->debugSetValue(leftSpeedCorrected);
-//          sensors[2]->debugSetValue(corrector);
-//          sensors[3]->debugSetValue(corrector);
-//          sensors[4]->debugSetValue(input);      
-//  
-}
-
 
 
 void printSensors() {
@@ -1361,49 +1153,18 @@ byte command = 0;
 unsigned long lastReceivedCommandTime = millis();
 
 void loop() {
-
   if (millis() - lastReceivedCommandTime > CONNECTION_LOST_TIME_INTERVAL) {
-    //ops, we've lost the connection
-    //Stop! Stop!
-
     leftMotor.stop();
     rightMotor.stop();
   }
-
-
-  
-      /*
-   * 
-   * Morors regulator algorithm
-   * 
-   * 
-   */
-
-   // Fixed steps_proportion;
     float e = 0; //невязка
     unsigned int stepsPathDelta = 0;
-
-  /*
-   *  TODO
-   * 
-   *  Check whether the power was turn on.
-   * 
-   */
     if (leftMotor.PIDpath > (unsigned int)((float)rightMotor.PIDpath)*speed_proportion ){
-
        stepsPathDelta = leftMotor.PIDpath - (unsigned int)((float)rightMotor.PIDpath)*speed_proportion;
-      
     }else{
-
-
            stepsPathDelta = (unsigned int)((float)rightMotor.PIDpath)*speed_proportion -  leftMotor.PIDpath;
-      
     }
-
-
-  //stepsPathDelta =  stepsPathDelta&0xFF;
-   //stepsPathDelta = abs(leftMotor.PIDpath - rightMotor.PIDpath);
-  if ( ( stepsPathDelta >1 ) && (leftMotor.stepsPath > 0) && (rightMotor.stepsPath > 0) && (globalLeftMotorSpeed > 0) && (globalRightMotorSpeed > 0)&&(flag==0) )
+  if (/* ( stepsPathDelta >1 ) && */(leftMotor.stepsPath > 0) && (rightMotor.stepsPath > 0) && (globalLeftMotorSpeed > 0) && (globalRightMotorSpeed > 0)&&(flag==0) )
   {          
        // steps_proportion =  steps_proportion.div(Fixed::fromInt(leftMotor.stepsPath),Fixed::fromInt(rightMotor.stepsPath));
            //   e = steps_proportion - speed_proportion; //вычисляем невязку
@@ -1614,7 +1375,6 @@ else
               break;
             }
           case 'c': {
-            itsg=0;
               byte leftSpeed = bytearrayData[0];
               byte rightSpeed = bytearrayData[1];
               flag=0;
@@ -1630,19 +1390,10 @@ else
                 rightSpeed -= 64;
               }
                speed_proportion = ((float)leftSpeed / (float) rightSpeed) * calibraterdl / calibrateldr;
-               //if(leftSpeed<13&&leftSpeed!=0&&leftSpeed!=1)
-               //leftSpeed=13;
-               //if(rightSpeed<13&&rightSpeed!=0&&rightSpeed!=1)
-               //rightSpeed=13;
                globalLeftMotorSpeed = leftSpeed;
                globalRightMotorSpeed = rightSpeed;
                globalLeftDir = leftDir;
                globalRightDir = rightDir;
-              //соотношение скоростей и путей соответственно
-               if(speed_proportion!=1)
-               kray=5;
-               else
-               kray=3;
                leftMotor.PIDspeed=leftSpeed;
                rightMotor.PIDspeed=rightSpeed;
               if((leftSpeed==0)&&(rightSpeed==0))//проверка на обнуление ПИД путей
@@ -1701,7 +1452,6 @@ else
               break;
             }
           case 'g': {
-            itsg=1;
               byte leftSpeed = bytearrayData[0];
               byte rightSpeed = bytearrayData[1];
               byte stepsHigh = bytearrayData[2];
@@ -1719,33 +1469,12 @@ else
                 rightDir = DIRECTION_BACKWARD;
                 rightSpeed -= 64;
               }
-              if((leftSpeed<20&&leftSpeed!=0&&leftSpeed!=1) || (rightSpeed<20&&rightSpeed!=0&&rightSpeed!=1) )
-               {
-              // leftSpeed=20;
-              //     rightSpeed=20;
-               Kr1= 15;
-               Kd1 =1.4;
-               kray1=2;
-               }
-              else if((leftSpeed>=17&&leftSpeed<30)||(rightSpeed>=17&&rightSpeed<30))
-              {
-               Kr1= 15;
-               Kd1 =1.4;
-               kray1=2;
-              }
-              else if((leftSpeed>=30&&leftSpeed<50)||(rightSpeed>=30&&rightSpeed<50))
-              {
-               Kr1= 5;
-               Kd1 =1.4;
-               kray1=2;
-              }              
-               else if(rightSpeed>=50||leftSpeed>=50)
-               {
-                Kr1=0.4;
-                Kd1 =0.1;
-                kray1=5;
-               }
-
+              //if(leftSpeed!=rightSpeed)
+              
+              if(leftSpeed==rightSpeed)
+              kii=0.92 -(63-leftSpeed)*0.02;
+              else
+              {kii=1;flag=1;}
               unsigned int iStepsLimit = stepsHigh;
               iStepsLimit = iStepsLimit << 8;
               iStepsLimit += stepsLow;
