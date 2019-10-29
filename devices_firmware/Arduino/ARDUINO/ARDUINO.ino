@@ -1,4 +1,4 @@
-#define FIRMWARE_VERSION "00000"
+#define FIRMWARE_VERSION "00003"
 //#include <EEPROM.h>
 #include "Arduino.h"
 #include "IRremote.h"
@@ -60,7 +60,7 @@ void printSensors(){
       case READ_ANA:
       inf = analogRead(a);
 
-      Serial.write(byte(inf>>2));
+      Serial.write(byte(inf%256));
             if(a>13)
       Serial.write(bitRead(inf,8)+bitRead(inf,9)*2);
       break;
@@ -236,7 +236,7 @@ void loop(){
             break;
             }
             case 'h': {
-            if (byteDataTail > 1) {
+            if (byteDataTail > 2) {
               commandState = COMMAND_STATE_WAITING_CRC;
             }
             break;
@@ -323,6 +323,7 @@ void loop(){
                 int note = bytearrayData[0]+(bytearrayData[1]>>4)*256;
                 int dura = bytearrayData[1]%16;
                 tone(bytearrayData[2],note,250*dura);
+                 //tone(13,100,1000);
                   printSensors();
                   break;
                }
@@ -374,7 +375,7 @@ void loop(){
                 byte longg=0;
                 char*str;
                 char * ha = (char*) malloc(55);
-                while((bytearrayData[it]!=32)&&(it<16))
+                while((bytearrayData[it]!=127)&&(it<16))
                 {
 
                     if(bytearrayData[it]>128)

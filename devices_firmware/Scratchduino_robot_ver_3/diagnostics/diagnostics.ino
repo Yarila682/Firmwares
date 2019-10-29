@@ -12,7 +12,13 @@ int MODEL_ID;
 
 
 void parseSerialNumber(){
-    if(analogRead(PIN_SOUND) < 600 && analogRead(PIN_LIGHT) > 200){
+
+     if (digitalRead(7) == 1){
+
+      MODEL_ID=6;
+      
+     }else if(analogRead(PIN_SOUND) < 600 && analogRead(PIN_LIGHT) > 200){
+      
        MODEL_ID=4;
     }
     else{
@@ -48,6 +54,3 @@ void loop(){
 
       delay(1000);
 }
-
-
-
