@@ -147,7 +147,7 @@ void loop(){
       if(commandState== COMMAND_STATE_WAITING_COMMAND){
          switch(b){
             case ' ':{
-               Serial.print("ROBBO-00006-00000-A-00000-00000-00000000000000000222");
+               Serial.print("ROBBO-00006-00003-A-00000-00000-00000000000000000222");
                break;
             }
             case 'a':{
